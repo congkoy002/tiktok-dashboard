@@ -8,6 +8,9 @@ const sheetName = 'Kenh';
 const previousFile = 'previous_data.json';
 
 const chromeProfiles = [
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 8',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 7',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 6',
   'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 5',
   'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 4',
   'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 3'
