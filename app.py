@@ -8,10 +8,13 @@ app = Flask(__name__)
 SPREADSHEET_ID = '1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc'
 
 # ===== TELEGRAM =====
-TOKEN = "8736136206:AAERH3X6xt423SnEdL4rOey-RM37L2_uwhk"
+TOKEN = "8736136206:AAERH3X6xt423SnEdL4Roey-RM37L2_uwhk"
 CHAT_ID = "6839559152"
 
+# cache theo timestamp
 sent_cache = {}
+ALERT_INTERVAL = 3600  # 2 giờ
+
 
 def send_telegram(msg):
     try:
@@ -22,6 +25,24 @@ def send_telegram(msg):
     except:
         pass
 
+
+# ===== CHECK 2 GIỜ =====
+def can_send(key):
+    now = datetime.datetime.now().timestamp()
+
+    if key not in sent_cache:
+        sent_cache[key] = now
+        return True
+
+    last_time = sent_cache[key]
+
+    if now - last_time >= ALERT_INTERVAL:
+        sent_cache[key] = now
+        return True
+
+    return False
+
+
 # ===== GOOGLE AUTH =====
 def get_creds():
     info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
@@ -30,9 +51,11 @@ def get_creds():
         scopes=['https://www.googleapis.com/auth/spreadsheets']
     )
 
+
 def get_sheet():
     creds = get_creds()
     return build('sheets', 'v4', credentials=creds)
+
 
 # ===== AI SCORING =====
 def calc_score(followers, last_view, total_views):
@@ -42,22 +65,29 @@ def calc_score(followers, last_view, total_views):
     ratio = last_view / followers
     score = 0
 
-    # Reach
-    if ratio > 0.5: score += 40
-    elif ratio > 0.2: score += 30
-    elif ratio > 0.1: score += 20
-    else: score += 5
+    if ratio > 0.5:
+        score += 40
+    elif ratio > 0.2:
+        score += 30
+    elif ratio > 0.1:
+        score += 20
+    else:
+        score += 5
 
-    # Volume
-    if total_views > 1_000_000: score += 30
-    elif total_views > 100_000: score += 20
-    else: score += 10
+    if total_views > 1_000_000:
+        score += 30
+    elif total_views > 100_000:
+        score += 20
+    else:
+        score += 10
 
-    # Momentum
-    if last_view > 500: score += 20
-    else: score += 5
+    if last_view > 500:
+        score += 20
+    else:
+        score += 5
 
     return min(score, 100)
+
 
 # ===== PICK BEST CHANNEL =====
 def pick_best_channel(data):
@@ -72,10 +102,8 @@ def pick_best_channel(data):
         if followers == 0:
             continue
 
-        reach = last / followers
-
         score = (
-            reach * 50 +
+            (last / followers) * 50 +
             (last / 1000) * 20 +
             (views / 10000) * 10
         )
@@ -85,6 +113,7 @@ def pick_best_channel(data):
             best = d
 
     return best, int(best_score)
+
 
 # ===== MAIN PROCESS =====
 def process_data():
@@ -103,13 +132,13 @@ def process_data():
     for r in rows:
         username = r[0]
 
-        followers = int(r[1]) if len(r)>1 and r[1].isdigit() else 0
-        total_views = int(r[5]) if len(r)>5 and r[5].isdigit() else 0
-        last_view = int(r[7]) if len(r)>7 and r[7].isdigit() else 0
+        followers = int(r[1]) if len(r) > 1 and str(r[1]).isdigit() else 0
+        total_views = int(r[5]) if len(r) > 5 and str(r[5]).isdigit() else 0
+        last_view = int(r[7]) if len(r) > 7 and str(r[7]).isdigit() else 0
 
         score = calc_score(followers, last_view, total_views)
 
-        # AI decision
+        # ===== DECISION =====
         if score >= 70:
             decision = "🔥 NUÔI MẠNH"
         elif score < 30:
@@ -117,18 +146,16 @@ def process_data():
         else:
             decision = "⚖️ THEO DÕI"
 
-        # ALERT chống spam
+        # ===== TELEGRAM ALERT (2 GIỜ / LẦN) =====
         if score >= 80:
             key = f"{username}_viral"
-            if key not in sent_cache:
+            if can_send(key):
                 send_telegram(f"🔥 {username} viral! Score: {score}")
-                sent_cache[key] = True
 
         if score < 20:
             key = f"{username}_flop"
-            if key not in sent_cache:
+            if can_send(key):
                 send_telegram(f"❌ {username} flop! Score: {score}")
-                sent_cache[key] = True
 
         history_rows.append([
             today, username, followers, total_views, last_view, score
@@ -143,7 +170,7 @@ def process_data():
             "Decision": decision
         })
 
-    # Lưu history
+    # ===== SAVE HISTORY =====
     service.spreadsheets().values().append(
         spreadsheetId=SPREADSHEET_ID,
         range="History!A2",
@@ -151,24 +178,25 @@ def process_data():
         body={"values": history_rows}
     ).execute()
 
-    # chọn best
+    # ===== BEST CHANNEL =====
     best, best_score = pick_best_channel(data)
 
     if best:
         key = f"best_{best['Username']}"
-        if key not in sent_cache:
+        if can_send(key):
             send_telegram(
                 f"🚀 BEST CHANNEL:\n{best['Username']}\nScore: {best_score}"
             )
-            sent_cache[key] = True
 
     return data, best, best_score
+
 
 # ===== API =====
 @app.route("/api/data")
 def api_data():
     data, _, _ = process_data()
     return jsonify(data)
+
 
 @app.route("/api/history")
 def api_history():
@@ -180,14 +208,17 @@ def api_history():
 
     return jsonify(rows)
 
+
 @app.route("/api/best")
 def api_best():
     _, best, score = process_data()
     return jsonify({"channel": best, "score": score})
 
+
 @app.route("/")
 def home():
     return render_template("dashboard.html")
+
 
 if __name__ == "__main__":
     app.run()
