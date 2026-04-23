@@ -1,0 +1,7 @@
+node_modules
+credentials.json
+previous_data.json
+history.json
+tiktok_results.json
+tiktok_results.csv
+log.txt
