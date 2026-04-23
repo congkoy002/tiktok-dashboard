@@ -3,6 +3,7 @@ const fs = require('fs');
 const { google } = require('googleapis');
 const credentials = require('./credentials.json');
 
+// ================= GOOGLE SHEET =================
 const auth = new google.auth.GoogleAuth({
   credentials: credentials,
   scopes: ['https://www.googleapis.com/auth/spreadsheets']
@@ -16,7 +17,15 @@ const sheets = google.sheets({
 const spreadsheetId = '1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc';
 const sheetName = 'Kenh';
 
-// ===== FULL PROFILE (3 → 8) =====
+// ================= CACHE GROWTH =================
+const cacheFile = 'growth_cache.json';
+
+let oldData = {};
+if (fs.existsSync(cacheFile)) {
+  oldData = JSON.parse(fs.readFileSync(cacheFile));
+}
+
+// ================= PROFILES =================
 const chromeProfiles = [
   'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 3',
   'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 4',
@@ -26,7 +35,7 @@ const chromeProfiles = [
   'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 8'
 ];
 
-// ===== PARSE NUMBER =====
+// ================= PARSE NUMBER =================
 function parseNumber(text) {
   if (!text) return 0;
 
@@ -39,20 +48,19 @@ function parseNumber(text) {
   return parseFloat(num) || 0;
 }
 
-// ===== GET USERNAMES =====
+// ================= GET USERNAMES =================
 async function getUsernamesFromSheet() {
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: sheetName + '!A2:A'
   });
 
-  const rows = response.data.values || [];
-
-  return rows
-    .map(row => row[0])
-    .filter(username => username && username.trim() !== '');
+  return (response.data.values || [])
+    .map(r => r[0])
+    .filter(Boolean);
 }
 
+// ================= MAIN =================
 (async () => {
   const usernames = await getUsernamesFromSheet();
 
@@ -61,13 +69,10 @@ async function getUsernamesFromSheet() {
   const results = [];
 
   let profileIndex = 0;
-  let context = null;
-  let page = null;
+  let context, page;
 
   async function openProfile(profilePath) {
-    try {
-      if (context) await context.close();
-    } catch (e) {}
+    if (context) await context.close().catch(() => {});
 
     console.log('👉 Open profile:', profilePath);
 
@@ -75,10 +80,7 @@ async function getUsernamesFromSheet() {
       channel: 'chrome',
       headless: false,
       viewport: null,
-      args: [
-        '--start-maximized',
-        '--disable-blink-features=AutomationControlled'
-      ]
+      args: ['--start-maximized']
     });
 
     page = context.pages()[0] || await context.newPage();
@@ -86,6 +88,7 @@ async function getUsernamesFromSheet() {
 
   await openProfile(chromeProfiles[profileIndex]);
 
+  // ================= SCRAPE =================
   for (const username of usernames) {
     try {
       console.log('\n====', username);
@@ -95,7 +98,7 @@ async function getUsernamesFromSheet() {
         timeout: 60000
       });
 
-      await page.waitForTimeout(8000);
+      await page.waitForTimeout(7000);
 
       const followers = await page.locator('[data-e2e="followers-count"]').innerText().catch(()=>'0');
       const following = await page.locator('[data-e2e="following-count"]').innerText().catch(()=>'0');
@@ -112,7 +115,26 @@ async function getUsernamesFromSheet() {
       const avgViews = videoCount ? Math.round(totalViews / videoCount) : 0;
       const lastView = views[0] ? parseNumber(views[0]) : 0;
 
+      const followersNumber = parseNumber(followers);
+      const likesNumber = parseNumber(likes);
+
+      const engagementRate = totalViews > 0
+        ? ((likesNumber / totalViews) * 100).toFixed(2) + '%'
+        : '0%';
+
+      let shadowbanWarning = 'No';
+      if (followersNumber > 0 && lastView < followersNumber * 0.01) {
+        shadowbanWarning = 'Possible';
+      }
+
       const updateTime = new Date().toLocaleString();
+
+      // ================= GROWTH SYSTEM =================
+      const prev = oldData[username] || {};
+
+      const followGrowth = followersNumber - (prev.followers || 0);
+      const likeGrowth = likesNumber - (prev.likes || 0);
+      const viewGrowth = totalViews - (prev.views || 0);
 
       const row = [
         username,
@@ -123,11 +145,18 @@ async function getUsernamesFromSheet() {
         totalViews,
         avgViews,
         lastView,
+        engagementRate,
+        shadowbanWarning,
         chromeProfiles[profileIndex],
-        updateTime
+        updateTime,
+        followGrowth,
+        likeGrowth,
+        viewGrowth
       ];
 
       results.push(row);
+
+      console.log(row);
 
       await page.waitForTimeout(3000);
 
@@ -135,24 +164,22 @@ async function getUsernamesFromSheet() {
       console.log('Error:', username, err.message);
 
       results.push([
-        username, 'Error', '', '', '', '', '', '',
+        username,'Error','','','','','','',
+        '','Error',
         chromeProfiles[profileIndex],
-        new Date().toLocaleString()
+        new Date().toLocaleString(),
+        0,0,0
       ]);
     }
 
-    // rotate profile (GIỮ LOGIC CỦA BẠN)
-    profileIndex++;
-    if (profileIndex >= chromeProfiles.length) {
-      profileIndex = 0;
-    }
-
+    // rotate profile
+    profileIndex = (profileIndex + 1) % chromeProfiles.length;
     await openProfile(chromeProfiles[profileIndex]);
   }
 
-  // ===== FIX GOOGLE SHEET (CHUẨN 100%) =====
+  // ================= GOOGLE SHEET UPDATE =================
   try {
-    console.log('\nUpdating Google Sheet...');
+    console.log('\n🔄 Updating Google Sheet...');
 
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
@@ -169,28 +196,46 @@ async function getUsernamesFromSheet() {
         'Total Views',
         'Avg Views',
         'Last Video View',
+        'Engagement Rate',
+        'Shadowban Warning',
         'Chrome Profile',
-        'Last Update'
+        'Last Update',
+        'Follow Growth',
+        'Like Growth',
+        'View Growth'
       ],
       ...results
     ];
 
-    const res = await sheets.spreadsheets.values.update({
+    await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: sheetName + '!A1',
       valueInputOption: 'RAW',
       requestBody: { values }
     });
 
-    console.log('Google Sheet updated:', res.status);
+    console.log('✅ Google Sheet updated');
 
   } catch (err) {
-    console.log('Sheet error:', err.message);
+    console.log('❌ Sheet error:', err.message);
   }
 
-  fs.writeFileSync('tiktok_results.json', JSON.stringify(results, null, 2));
+  // ================= SAVE CACHE =================
+  const newCache = {};
 
-  console.log('DONE');
+  results.forEach(r => {
+    if (r[0] && r[0] !== 'Error') {
+      newCache[r[0]] = {
+        followers: parseNumber(r[1]),
+        likes: parseNumber(r[3]),
+        views: r[5]
+      };
+    }
+  });
+
+  fs.writeFileSync(cacheFile, JSON.stringify(newCache, null, 2));
+
+  console.log('💾 Cache updated');
 
   if (context) await context.close();
 })();
