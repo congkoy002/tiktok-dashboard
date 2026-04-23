@@ -1,193 +1,189 @@
 ﻿const { chromium } = require('playwright');
 const fs = require('fs');
 const { google } = require('googleapis');
+const { execSync } = require('child_process');
+
 const credentials = require('./credentials.json');
-
-const spreadsheetId = '1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc';
-const sheetName = 'Kenh';
-const previousFile = 'previous_data.json';
-
-const chromeProfiles = [
-  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 8',
-  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 7',
-  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 6',
-  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 5',
-  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 4',
-  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 3'
-];
 
 const auth = new google.auth.GoogleAuth({
   credentials,
   scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
 
-const sheets = google.sheets({ version: 'v4', auth });
+const sheets = google.sheets({
+  version: 'v4',
+  auth
+});
 
-let previousData = {};
-if (fs.existsSync(previousFile)) {
-  previousData = JSON.parse(fs.readFileSync(previousFile));
-}
+const spreadsheetId = '1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc';
+const sheetName = 'Kenh';
 
+// ✅ THÊM PROFILE 6,7,8
+const chromeProfiles = [
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 3',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 4',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 5',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 6',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 7',
+  'C:\\Users\\Administrator\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 8'
+];
+
+// parse số
 function parseNumber(text) {
   if (!text) return 0;
-  let num = text.toString().toUpperCase().replace(/,/g, '').trim();
+  let num = text.toUpperCase().replace(/,/g, '').trim();
   if (num.includes('K')) return parseFloat(num) * 1000;
   if (num.includes('M')) return parseFloat(num) * 1000000;
+  if (num.includes('B')) return parseFloat(num) * 1000000000;
   return parseFloat(num) || 0;
 }
 
+// lấy username từ sheet
 async function getUsernames() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: sheetName + '!A2:A'
   });
-  return (res.data.values || []).map(r => r[0]).filter(x => x);
+
+  return (res.data.values || [])
+    .map(r => r[0])
+    .filter(x => x);
 }
 
 (async () => {
-
-  console.log('START: ' + new Date().toLocaleString());
-
   const usernames = await getUsernames();
-  const results = [];
+  console.log('Usernames:', usernames);
 
-  let profileIndex = 0;
   let context, page;
 
-  async function openProfile(path) {
-    if (context) await context.close().catch(()=>{});
-    context = await chromium.launchPersistentContext(path, {
+  // mở profile
+  async function openProfile(profilePath) {
+    if (context) await context.close().catch(() => {});
+
+    console.log('👉 Open profile:', profilePath);
+
+    context = await chromium.launchPersistentContext(profilePath, {
       channel: 'chrome',
-      headless: false
+      headless: false,
+      viewport: null,
+      args: [
+        '--start-maximized',
+        '--disable-blink-features=AutomationControlled'
+      ]
     });
+
     page = context.pages()[0] || await context.newPage();
   }
 
-  await openProfile(chromeProfiles[0]);
+  let profileIndex = Math.floor(Math.random() * chromeProfiles.length);
+  await openProfile(chromeProfiles[profileIndex]);
+
+  const results = [];
 
   for (const username of usernames) {
     try {
+      console.log('\n====', username);
 
-      await page.goto('https://www.tiktok.com/@' + username);
+      // delay random chống captcha
+      await page.waitForTimeout(5000 + Math.random() * 5000);
+
+      await page.goto(`https://www.tiktok.com/@${username}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
+
+      // giả lập người dùng
       await page.waitForTimeout(8000);
+      await page.mouse.move(100, 200);
+      await page.mouse.wheel(0, 500);
 
-      const followers = await page.locator('[data-e2e="followers-count"]').innerText().catch(()=>0);
-      const following = await page.locator('[data-e2e="following-count"]').innerText().catch(()=>0);
-      const likes = await page.locator('[data-e2e="likes-count"]').innerText().catch(()=>0);
+      // check captcha
+      const content = await page.content();
+      const url = page.url();
 
-      const videoCount = await page.locator('[data-e2e="user-post-item"]').count().catch(()=>0);
+      if (
+        url.includes('captcha') ||
+        url.includes('verify') ||
+        content.toLowerCase().includes('captcha')
+      ) {
+        console.log('⚠️ CAPTCHA → đổi profile');
 
-      const views = await page.$$eval('[data-e2e="user-post-item"] strong', els =>
-        els.map(e => e.innerText)
-      ).catch(()=>[]);
+        profileIndex = (profileIndex + 1) % chromeProfiles.length;
+        await openProfile(chromeProfiles[profileIndex]);
+        continue;
+      }
+
+      // lấy data
+      const followers = await page.locator('[data-e2e="followers-count"]').innerText().catch(()=>'0');
+      const following = await page.locator('[data-e2e="following-count"]').innerText().catch(()=>'0');
+      const likes = await page.locator('[data-e2e="likes-count"]').innerText().catch(()=>'0');
+
+      const videos = await page.locator('[data-e2e="user-post-item"]').count();
+
+      const views = await page.$$eval(
+        '[data-e2e="user-post-item"] strong',
+        els => els.map(e => e.innerText)
+      );
 
       const totalViews = views.reduce((s,v)=>s+parseNumber(v),0);
-      const avgViews = videoCount ? Math.round(totalViews/videoCount) : 0;
+      const avgViews = videos ? Math.round(totalViews / videos) : 0;
       const lastView = views[0] ? parseNumber(views[0]) : 0;
 
-      // FLOP
+      // flop check
+      let flop = 'No';
       const last3 = views.slice(0,3).map(v=>parseNumber(v));
-      const flopStatus = (last3.length>=3 && last3.every(v=>v<100)) ? 'YES' : 'NO';
+      if (last3.length === 3 && last3.every(v => v < 100)) flop = 'YES';
 
-      // VIRAL
-      const viewGrowth = totalViews - ((previousData[username]||{}).views || 0);
-      const isViral = lastView >= 1000 && viewGrowth > 500 && flopStatus === 'NO';
+      // viral check
+      let viral = 'No';
+      if (lastView > parseNumber(followers) * 0.2) viral = 'YES';
 
-      const followersNum = parseNumber(followers);
-      const likesNum = parseNumber(likes);
+      const updateTime = new Date().toLocaleString();
 
-      const old = previousData[username] || {};
-
-      const followerGrowth = followersNum - (old.followers || 0);
-      const likeGrowth = likesNum - (old.likes || 0);
-
-      // SCORE
-      let score = 0;
-      if (avgViews >= 1000) score += 2;
-      else if (avgViews >= 300) score += 1;
-      else score -= 1;
-
-      if (lastView >= 300) score += 2;
-      else if (lastView >= 100) score += 1;
-      else score -= 2;
-
-      if (followerGrowth > 0) score += 1;
-      else score -= 1;
-
-      if (flopStatus === 'YES') score -= 3;
-
-      let channelStatus = 'NUOI';
-      if (score <= -2) channelStatus = 'BO';
-      else if (score <= 1) channelStatus = 'CANH BAO';
-
-      const row = {
-        Username: username,
-        Followers: followers,
-        Following: following,
-        Likes: likes,
-        Videos: videoCount,
-        TotalViews: totalViews,
-        AvgViews: avgViews,
-        LastView: lastView,
-        FollowerGrowth: followerGrowth,
-        LikeGrowth: likeGrowth,
-        ViewGrowth: viewGrowth,
-        Last3Views: last3.join(','),
-        FlopStatus: flopStatus,
-        IsViral: isViral ? 'YES' : 'NO',
-        Score: score,
-        ChannelStatus: channelStatus,
-        Time: new Date().toLocaleString()
-      };
+      const row = [
+        username,
+        followers,
+        following,
+        likes,
+        videos,
+        totalViews,
+        avgViews,
+        lastView,
+        flop,
+        viral,
+        chromeProfiles[profileIndex],
+        updateTime
+      ];
 
       results.push(row);
+
       console.log(row);
 
       await page.waitForTimeout(5000);
 
-    } catch (e) {
-      console.log('ERROR: ' + username);
+    } catch (err) {
+      console.log('❌ Error:', err.message);
     }
   }
 
-  // UPDATE SHEET
-  const values = [[
-'Username','Followers','Following','Likes','Videos',
-'Total Views','Avg Views','Last Video View',
-'Follower Growth','Like Growth','View Growth',
-'Last 3 Views','Flop Status','Is Viral','Score','Channel Status','Last Update'
-]];
-
-  results.forEach(r=>{
-    values.push([
-      r.Username,r.Followers,r.Following,r.Likes,r.Videos,
-      r.TotalViews,r.AvgViews,r.LastView,
-      r.FollowerGrowth,r.LikeGrowth,r.ViewGrowth,
-      r.Last3Views,r.FlopStatus,r.IsViral,r.Score,r.ChannelStatus,r.Time
-    ]);
-  });
-
+  // update Google Sheet
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: sheetName + '!A1',
+    range: sheetName + '!A2',
     valueInputOption: 'RAW',
-    requestBody: { values }
+    requestBody: {
+      values: results
+    }
   });
 
-  // SAVE JSON
-  fs.writeFileSync('tiktok_results.json', JSON.stringify(results, null, 2));
+  console.log('\n✅ Updated Google Sheet');
 
-  const save = {};
-  results.forEach(r=>{
-    save[r.Username] = {
-      followers: parseNumber(r.Followers),
-      likes: parseNumber(r.Likes),
-      views: r.TotalViews
-    };
-  });
-
-  fs.writeFileSync(previousFile, JSON.stringify(save, null, 2));
+  // auto push nếu bạn muốn
+  try {
+    execSync('git add .');
+    execSync('git commit -m "auto update"');
+    execSync('git push');
+  } catch {}
 
   if (context) await context.close();
-
 })();
