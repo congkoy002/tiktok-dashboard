@@ -2,107 +2,323 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TikTok Dashboard</title>
+<title>TikTok SaaS Dashboard PRO</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 
 <style>
 body {
-    font-family: Arial;
-    background: #0f172a;
-    color: white;
-    padding: 20px;
+    margin:0;
+    font-family:Arial;
+    background:#0b1220;
+    color:white;
 }
 
-h1 {
-    text-align: center;
+.header {
+    padding:15px;
+    text-align:center;
+    font-size:20px;
+    font-weight:bold;
+}
+
+.topbar {
+    display:flex;
+    justify-content:space-between;
+    padding:10px 20px;
+}
+
+select,button {
+    padding:8px;
+    border-radius:8px;
+    border:none;
+    background:#111827;
+    color:white;
+}
+
+.container {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    padding:10px;
+}
+
+.card {
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:12px;
+    padding:10px;
+}
+
+.draggable {
+    position:relative;
 }
 
 table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
+    width:100%;
+    border-collapse:collapse;
 }
 
-th, td {
-    padding: 10px;
-    text-align: center;
+th,td {
+    padding:8px;
+    text-align:center;
 }
 
 th {
-    background: #1e293b;
+    background:#111827;
 }
 
-tr:nth-child(even) {
-    background: #111827;
+tr:nth-child(even){
+    background:rgba(255,255,255,0.03);
 }
 
-.viral {
-    color: #22c55e;
-    font-weight: bold;
+.best {
+    background:rgba(34,197,94,0.15) !important;
 }
 
-.flop {
-    color: #ef4444;
-    font-weight: bold;
+.hot {
+    border:1px solid #22c55e;
 }
 
-.normal {
-    color: #facc15;
+/* modal */
+#modal {
+    display:none;
+    position:fixed;
+    top:0;left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.8);
+    padding:50px;
 }
 </style>
-
-<script>
-// auto refresh mỗi 60s
-setInterval(() => {
-    location.reload();
-}, 60000);
-</script>
-
 </head>
 
 <body>
 
-<h1>📊 TikTok Dashboard</h1>
+<div class="header">🚀 SaaS TikTok Dashboard PRO</div>
 
+<div class="topbar">
+    <div>
+        Workspace:
+        <select id="ws" onchange="loadData()">
+            <option value="default">Default</option>
+            <option value="vn">VN</option>
+            <option value="us">US</option>
+        </select>
+    </div>
+
+    <div>
+        <button onclick="saveLayout()">💾 Save</button>
+        <button onclick="loadLayout()">📥 Load</button>
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="card draggable" id="topBox">
+        <h3>🔥 Top Growing</h3>
+        <div id="topGrow"></div>
+    </div>
+
+    <div class="card draggable" id="chartBox">
+        <canvas id="chart"></canvas>
+    </div>
+
+</div>
+
+<div class="card draggable" id="tableBox">
 <table>
-    <tr>
-        <th>Username</th>
-        <th>Followers</th>
-        <th>Following</th>
-        <th>Likes</th>
-        <th>Videos</th>
-        <th>Total Views</th>
-        <th>Avg Views</th>
-        <th>Last View</th>
-        <th>Status</th>
-        <th>Update Time</th>
-    </tr>
-
-    {% for row in data %}
-    <tr>
-        <td>{{ row.Username }}</td>
-        <td>{{ row.Followers }}</td>
-        <td>{{ row.Following }}</td>
-        <td>{{ row.Likes }}</td>
-        <td>{{ row.Videos }}</td>
-        <td>{{ row.TotalViews }}</td>
-        <td>{{ row.AvgViews }}</td>
-        <td>{{ row.LastView }}</td>
-
-        <td>
-            {% if row.Viral == "YES" %}
-                <span class="viral">🔥 VIRAL</span>
-            {% elif row.Flop == "YES" %}
-                <span class="flop">❌ FLOP</span>
-            {% else %}
-                <span class="normal">⚖️ NORMAL</span>
-            {% endif %}
-        </td>
-
-        <td>{{ row.UpdateTime }}</td>
-    </tr>
-    {% endfor %}
-
+<thead>
+<tr>
+<th>User</th>
+<th>Followers</th>
+<th>Views</th>
+<th>Growth</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
 </table>
+</div>
+
+<!-- modal -->
+<div id="modal">
+    <div class="card">
+        <h3 id="modalTitle"></h3>
+        <canvas id="modalChart"></canvas>
+        <button onclick="closeModal()">Close</button>
+    </div>
+</div>
+
+<script>
+
+let DATA = [];
+let chart;
+let modalChart;
+
+// ================= LOAD =================
+async function loadData(){
+    let ws = document.getElementById("ws").value;
+
+    let res = await fetch(`/api/workspace/${ws}/data`);
+    DATA = await res.json();
+
+    renderAll();
+}
+
+function renderAll(){
+    renderTable();
+    renderTop();
+    renderChart();
+}
+
+// ================= TOP GROW =================
+function renderTop(){
+    let top = [...DATA]
+        .sort((a,b)=>(b.ViewGrowth||0)-(a.ViewGrowth||0))
+        .slice(0,5);
+
+    document.getElementById("topGrow").innerHTML =
+        top.map(d=>`
+            <div style="padding:8px;cursor:pointer"
+            onclick="openChart('${d.Username}')">
+                🔥 ${d.Username} <br>
+                +${d.ViewGrowth||0}
+            </div>
+        `).join("");
+}
+
+// ================= TABLE =================
+function renderTable(){
+    let tbody = document.getElementById("tbody");
+    tbody.innerHTML = "";
+
+    let best = [...DATA].sort((a,b)=>(b.TotalViews||0)-(a.TotalViews||0))[0];
+
+    DATA.forEach(d=>{
+
+        let hot = (d.ViewGrowth||0) > 1000;
+
+        tbody.innerHTML += `
+        <tr class="${d.Username==best?.Username?'best':''} ${hot?'hot':''}">
+            <td>${d.Username}</td>
+            <td>${d.Followers||0}</td>
+
+            <!-- FIX: TOTAL VIEWS -->
+            <td>${d.TotalViews||0}</td>
+
+            <td style="color:#38bdf8">${d.ViewGrowth||0}</td>
+
+            <td>
+                ${d.Viral=="YES"
+                    ? "🔥"
+                    : d.Flop=="YES"
+                    ? "❌"
+                    : "⚖️"}
+            </td>
+        </tr>`;
+    });
+}
+
+// ================= CHART =================
+function renderChart(){
+    let labels = DATA.map(d=>d.Username);
+    let views = DATA.map(d=>d.TotalViews||0);
+
+    if(chart) chart.destroy();
+
+    chart = new Chart(document.getElementById("chart"), {
+        type:"bar",
+        data:{
+            labels,
+            datasets:[{
+                label:"Views",
+                data:views
+            }]
+        }
+    });
+}
+
+// ================= CLICK CHART =================
+async function openChart(user){
+
+    document.getElementById("modal").style.display="block";
+    document.getElementById("modalTitle").innerText=user;
+
+    let res = await fetch(`/api/history`);
+    let data = await res.json();
+
+    let filtered = data.filter(r=>r[1]==user);
+
+    let labels = filtered.map(r=>r[0]);
+    let views = filtered.map(r=>parseInt(r[5])||0);
+
+    if(modalChart) modalChart.destroy();
+
+    modalChart = new Chart(document.getElementById("modalChart"),{
+        type:"line",
+        data:{
+            labels,
+            datasets:[{label:"Views",data:views}]
+        }
+    });
+}
+
+function closeModal(){
+    document.getElementById("modal").style.display="none";
+}
+
+// ================= DRAG =================
+interact('.draggable').draggable({
+    listeners:{
+        move(event){
+            let target = event.target;
+
+            let x = (parseFloat(target.dataset.x)||0)+event.dx;
+            let y = (parseFloat(target.dataset.y)||0)+event.dy;
+
+            target.style.transform=`translate(${x}px,${y}px)`;
+
+            target.dataset.x=x;
+            target.dataset.y=y;
+        }
+    }
+});
+
+// ================= SAVE LAYOUT =================
+function saveLayout(){
+    let layout=[];
+
+    document.querySelectorAll('.draggable').forEach(el=>{
+        layout.push({
+            id:el.id,
+            x:el.dataset.x||0,
+            y:el.dataset.y||0
+        });
+    });
+
+    localStorage.setItem("layout",JSON.stringify(layout));
+}
+
+// ================= LOAD LAYOUT =================
+function loadLayout(){
+    let layout=JSON.parse(localStorage.getItem("layout")||"[]");
+
+    layout.forEach(i=>{
+        let el=document.getElementById(i.id);
+        if(!el) return;
+
+        el.style.transform=`translate(${i.x}px,${i.y}px)`;
+        el.dataset.x=i.x;
+        el.dataset.y=i.y;
+    });
+}
+
+// INIT
+loadData();
+setInterval(loadData,30000);
+
+</script>
 
 </body>
 </html>
