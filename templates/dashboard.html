@@ -1,0 +1,94 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body { background:#0f172a; color:white; font-family:Arial; padding:20px;}
+.card { background:#1e293b; padding:15px; border-radius:10px; margin-bottom:15px;}
+</style>
+</head>
+
+<body>
+
+<h2>🚀 TikTok AI Dashboard</h2>
+
+<div class="card" id="bestBox"></div>
+
+<canvas id="chart"></canvas>
+
+<table border="1" width="100%" style="margin-top:20px;">
+<tr>
+<th>User</th>
+<th>Followers</th>
+<th>Views</th>
+<th>Last</th>
+<th>Score</th>
+<th>Decision</th>
+</tr>
+<tbody id="tbody"></tbody>
+</table>
+
+<script>
+async function loadBest(){
+    let res = await fetch('/api/best');
+    let data = await res.json();
+    let b = data.channel;
+
+    document.getElementById("bestBox").innerHTML = `
+    <h3>🏆 Best Channel: ${b.Username}</h3>
+    <p>Score: ${data.score}</p>
+    <p>Last View: ${b.LastView}</p>
+    `;
+}
+
+async function loadData(){
+    let res = await fetch('/api/data');
+    let data = await res.json();
+
+    let tbody = document.getElementById("tbody");
+    tbody.innerHTML = "";
+
+    data.forEach(d=>{
+        tbody.innerHTML += `
+        <tr>
+        <td>${d.Username}</td>
+        <td>${d.Followers}</td>
+        <td>${d.Views}</td>
+        <td>${d.LastView}</td>
+        <td>${d.Score}</td>
+        <td>${d.Decision}</td>
+        </tr>`;
+    });
+}
+
+async function loadChart(){
+    let res = await fetch('/api/history');
+    let data = await res.json();
+
+    let labels = data.map(r=>r[0]);
+    let views = data.map(r=>parseInt(r[3])||0);
+
+    new Chart(document.getElementById('chart'), {
+        type:'line',
+        data:{
+            labels: labels,
+            datasets:[{label:'Views', data: views}]
+        }
+    });
+}
+
+loadBest();
+loadData();
+loadChart();
+
+setInterval(()=>{
+    loadBest();
+    loadData();
+},60000);
+</script>
+
+</body>
+</html>

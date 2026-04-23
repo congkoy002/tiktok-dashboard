@@ -1,74 +1,193 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import os
-import json
+import os, json, requests, datetime
 
 app = Flask(__name__)
 
 SPREADSHEET_ID = '1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc'
-RANGE_NAME = 'Kenh!A2:Q'
 
+# ===== TELEGRAM =====
+TOKEN = "8775825908:AAHhtdm8t01gB3Vto47EaDnL4Ogz-iKgFFc"
+CHAT_ID = "YOUR_CHAT_ID"
 
-def get_creds():
+sent_cache = {}
+
+def send_telegram(msg):
     try:
-        info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
-        creds = service_account.Credentials.from_service_account_info(
-            info,
-            scopes=['https://www.googleapis.com/auth/spreadsheets.readonly']
+        requests.get(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            params={"chat_id": CHAT_ID, "text": msg}
         )
-        return creds
-    except Exception as e:
-        print("❌ Lỗi credentials:", e)
-        return None
+    except:
+        pass
 
+# ===== GOOGLE AUTH =====
+def get_creds():
+    info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
+    return service_account.Credentials.from_service_account_info(
+        info,
+        scopes=['https://www.googleapis.com/auth/spreadsheets']
+    )
 
-def get_data():
+def get_sheet():
     creds = get_creds()
-    if not creds:
-        return []
+    return build('sheets', 'v4', credentials=creds)
 
-    try:
-        service = build('sheets', 'v4', credentials=creds)
-        sheet = service.spreadsheets()
+# ===== AI SCORING =====
+def calc_score(followers, last_view, total_views):
+    if followers == 0:
+        return 0
 
-        result = sheet.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=RANGE_NAME
-        ).execute()
+    ratio = last_view / followers
+    score = 0
 
-        rows = result.get('values', [])
+    # Reach
+    if ratio > 0.5: score += 40
+    elif ratio > 0.2: score += 30
+    elif ratio > 0.1: score += 20
+    else: score += 5
 
-        data = []
+    # Volume
+    if total_views > 1_000_000: score += 30
+    elif total_views > 100_000: score += 20
+    else: score += 10
 
-        for r in rows:
-            data.append({
-                "Username": r[0] if len(r) > 0 else '',
-                "Followers": r[1] if len(r) > 1 else '',
-                "Following": r[2] if len(r) > 2 else '',
-                "Likes": r[3] if len(r) > 3 else '',
-                "Videos": r[4] if len(r) > 4 else '',
-                "TotalViews": r[5] if len(r) > 5 else '',
-                "AvgViews": r[6] if len(r) > 6 else '',
-                "LastView": r[7] if len(r) > 7 else '',
-                "Flop": r[8] if len(r) > 8 else '',
-                "Viral": r[9] if len(r) > 9 else '',
-                "Profile": r[10] if len(r) > 10 else '',
-                "UpdateTime": r[11] if len(r) > 11 else ''
-            })
+    # Momentum
+    if last_view > 500: score += 20
+    else: score += 5
 
-        return data
+    return min(score, 100)
 
-    except Exception as e:
-        print("❌ Lỗi Google Sheets:", e)
-        return []
+# ===== PICK BEST CHANNEL =====
+def pick_best_channel(data):
+    best = None
+    best_score = 0
 
+    for d in data:
+        followers = d["Followers"]
+        last = d["LastView"]
+        views = d["Views"]
+
+        if followers == 0:
+            continue
+
+        reach = last / followers
+
+        score = (
+            reach * 50 +
+            (last / 1000) * 20 +
+            (views / 10000) * 10
+        )
+
+        if score > best_score:
+            best_score = score
+            best = d
+
+    return best, int(best_score)
+
+# ===== MAIN PROCESS =====
+def process_data():
+    service = get_sheet()
+
+    rows = service.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range="Kenh!A2:Q"
+    ).execute().get("values", [])
+
+    today = datetime.date.today().isoformat()
+
+    history_rows = []
+    data = []
+
+    for r in rows:
+        username = r[0]
+
+        followers = int(r[1]) if len(r)>1 and r[1].isdigit() else 0
+        total_views = int(r[5]) if len(r)>5 and r[5].isdigit() else 0
+        last_view = int(r[7]) if len(r)>7 and r[7].isdigit() else 0
+
+        score = calc_score(followers, last_view, total_views)
+
+        # AI decision
+        if score >= 70:
+            decision = "🔥 NUÔI MẠNH"
+        elif score < 30:
+            decision = "❌ BỎ"
+        else:
+            decision = "⚖️ THEO DÕI"
+
+        # ALERT chống spam
+        if score >= 80:
+            key = f"{username}_viral"
+            if key not in sent_cache:
+                send_telegram(f"🔥 {username} viral! Score: {score}")
+                sent_cache[key] = True
+
+        if score < 20:
+            key = f"{username}_flop"
+            if key not in sent_cache:
+                send_telegram(f"❌ {username} flop! Score: {score}")
+                sent_cache[key] = True
+
+        history_rows.append([
+            today, username, followers, total_views, last_view, score
+        ])
+
+        data.append({
+            "Username": username,
+            "Followers": followers,
+            "Views": total_views,
+            "LastView": last_view,
+            "Score": score,
+            "Decision": decision
+        })
+
+    # Lưu history
+    service.spreadsheets().values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range="History!A2",
+        valueInputOption="RAW",
+        body={"values": history_rows}
+    ).execute()
+
+    # chọn best
+    best, best_score = pick_best_channel(data)
+
+    if best:
+        key = f"best_{best['Username']}"
+        if key not in sent_cache:
+            send_telegram(
+                f"🚀 BEST CHANNEL:\n{best['Username']}\nScore: {best_score}"
+            )
+            sent_cache[key] = True
+
+    return data, best, best_score
+
+# ===== API =====
+@app.route("/api/data")
+def api_data():
+    data, _, _ = process_data()
+    return jsonify(data)
+
+@app.route("/api/history")
+def api_history():
+    service = get_sheet()
+    rows = service.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range="History!A2:F"
+    ).execute().get("values", [])
+
+    return jsonify(rows)
+
+@app.route("/api/best")
+def api_best():
+    _, best, score = process_data()
+    return jsonify({"channel": best, "score": score})
 
 @app.route("/")
 def home():
-    data = get_data()
-    return render_template("index.html", data=data)
-
+    return render_template("dashboard.html")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
