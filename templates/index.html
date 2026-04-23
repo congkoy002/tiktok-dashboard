@@ -2,131 +2,135 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TikTok SaaS Dashboard PRO</title>
+<title>TikTok AI Dashboard PRO</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
 
 <style>
-body {
-    margin:0;
-    font-family:Arial;
+body{
     background:#0b1220;
-    color:white;
+    color:#fff;
+    font-family:Arial;
+    padding:20px;
 }
 
-.header {
-    padding:15px;
+h1{
     text-align:center;
-    font-size:20px;
-    font-weight:bold;
 }
 
-.topbar {
-    display:flex;
-    justify-content:space-between;
-    padding:10px 20px;
-}
-
-select,button {
-    padding:8px;
-    border-radius:8px;
-    border:none;
-    background:#111827;
-    color:white;
-}
-
-.container {
+.container{
     display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:10px;
-    padding:10px;
+    grid-template-columns:1fr 2fr;
+    gap:15px;
 }
 
-.card {
+/* ================= CARD ================= */
+.card{
     background:rgba(255,255,255,0.05);
-    border:1px solid rgba(255,255,255,0.1);
+    padding:15px;
     border-radius:12px;
-    padding:10px;
 }
 
-.draggable {
-    position:relative;
-}
-
-table {
+/* ================= TABLE ================= */
+table{
     width:100%;
     border-collapse:collapse;
 }
 
-th,td {
-    padding:8px;
+th,td{
+    padding:10px;
     text-align:center;
 }
 
-th {
-    background:#111827;
+th{
+    background:#1e293b;
 }
 
-tr:nth-child(even){
-    background:rgba(255,255,255,0.03);
+tr{
+    transition:all .3s ease;
 }
 
-.best {
-    background:rgba(34,197,94,0.15) !important;
+tr:hover{
+    background:rgba(255,255,255,0.08);
 }
 
-.hot {
-    border:1px solid #22c55e;
+/* ================= HIGHLIGHT ================= */
+.hot{
+    background:rgba(34,197,94,0.15);
+    border-left:3px solid #22c55e;
 }
 
-/* modal */
-#modal {
-    display:none;
-    position:fixed;
-    top:0;left:0;
+.rising{
+    background:rgba(59,130,246,0.15);
+    border-left:3px solid #3b82f6;
+}
+
+/* ================= TOP BOX ================= */
+#topBox{
+    font-size:14px;
+    line-height:1.6;
+}
+
+/* ================= CHART ================= */
+canvas{
     width:100%;
-    height:100%;
-    background:rgba(0,0,0,0.8);
-    padding:50px;
+}
+
+/* ================= HEATMAP ================= */
+#heatmap{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:4px;
+    margin-top:10px;
+}
+
+.cell{
+    height:18px;
+    border-radius:3px;
+}
+
+/* ================= ANIMATION ================= */
+@keyframes glow {
+    0% { transform:scale(1); }
+    50% { transform:scale(1.02); }
+    100% { transform:scale(1); }
+}
+
+.animated{
+    animation:glow 1s infinite;
 }
 </style>
 </head>
 
 <body>
 
-<div class="header">🚀 SaaS TikTok Dashboard PRO</div>
-
-<div class="topbar">
-    <div>
-        Workspace:
-        <select id="ws" onchange="loadData()">
-            <option value="default">Default</option>
-            <option value="vn">VN</option>
-            <option value="us">US</option>
-        </select>
-    </div>
-
-    <div>
-        <button onclick="saveLayout()">💾 Save</button>
-        <button onclick="loadLayout()">📥 Load</button>
-    </div>
-</div>
+<h1>🚀 TikTok AI Dashboard PRO</h1>
 
 <div class="container">
 
-    <div class="card draggable" id="topBox">
-        <h3>🔥 Top Growing</h3>
-        <div id="topGrow"></div>
-    </div>
+<!-- LEFT -->
+<div>
 
-    <div class="card draggable" id="chartBox">
-        <canvas id="chart"></canvas>
-    </div>
+<div class="card">
+<h3>🔥 Top Trending</h3>
+<div id="topBox"></div>
+</div>
+
+<div class="card">
+<h3>📊 Heatmap Growth</h3>
+<div id="heatmap"></div>
+</div>
 
 </div>
 
-<div class="card draggable" id="tableBox">
+<!-- RIGHT -->
+<div>
+
+<div class="card">
+<canvas id="chart"></canvas>
+</div>
+
+<div class="card">
 <table>
 <thead>
 <tr>
@@ -134,189 +138,148 @@ tr:nth-child(even){
 <th>Followers</th>
 <th>Views</th>
 <th>Growth</th>
-<th>Status</th>
+<th>AI Score</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
 </table>
 </div>
 
-<!-- modal -->
-<div id="modal">
-    <div class="card">
-        <h3 id="modalTitle"></h3>
-        <canvas id="modalChart"></canvas>
-        <button onclick="closeModal()">Close</button>
-    </div>
+</div>
 </div>
 
 <script>
 
-let DATA = [];
-let chart;
-let modalChart;
+let DATA=[];
 
-// ================= LOAD =================
-async function loadData(){
-    let ws = document.getElementById("ws").value;
+// ================= SAFE =================
+function safe(v){
+    return v ?? 0;
+}
 
-    let res = await fetch(`/api/workspace/${ws}/data`);
+// ================= AI SCORE =================
+function calcScore(d){
+
+    let f = d.Followers || 1;
+    let v = d.TotalViews || 0;
+    let g = d.ViewGrowth || 0;
+    let l = d.LastVideoView || 0;
+
+    let score =
+        Math.min(g/50,40) +
+        Math.min((l/f)*100,30) +
+        Math.min(Math.log10(v+1)*5,20) +
+        (l > f*0.2 ? 10 : 0);
+
+    return Math.round(score);
+}
+
+// ================= LOAD DATA =================
+async function load(){
+
+    let res = await fetch("/api/workspace/default/data");
     DATA = await res.json();
 
-    renderAll();
+    DATA = DATA.map(d => ({
+        ...d,
+        AI: calcScore(d)
+    }));
+
+    render();
 }
 
-function renderAll(){
+// ================= RENDER =================
+function render(){
     renderTable();
     renderTop();
-    renderChart();
-}
-
-// ================= TOP GROW =================
-function renderTop(){
-    let top = [...DATA]
-        .sort((a,b)=>(b.ViewGrowth||0)-(a.ViewGrowth||0))
-        .slice(0,5);
-
-    document.getElementById("topGrow").innerHTML =
-        top.map(d=>`
-            <div style="padding:8px;cursor:pointer"
-            onclick="openChart('${d.Username}')">
-                🔥 ${d.Username} <br>
-                +${d.ViewGrowth||0}
-            </div>
-        `).join("");
+    renderHeatmap();
 }
 
 // ================= TABLE =================
 function renderTable(){
+
     let tbody = document.getElementById("tbody");
     tbody.innerHTML = "";
 
-    let best = [...DATA].sort((a,b)=>(b.TotalViews||0)-(a.TotalViews||0))[0];
+    let sorted = [...DATA].sort((a,b)=>b.AI - a.AI);
 
-    DATA.forEach(d=>{
+    sorted.forEach(d => {
 
-        let hot = (d.ViewGrowth||0) > 1000;
+        let hot = d.AI > 75;
+        let rising = d.ViewGrowth > 1000;
 
         tbody.innerHTML += `
-        <tr class="${d.Username==best?.Username?'best':''} ${hot?'hot':''}">
-            <td>${d.Username}</td>
-            <td>${d.Followers||0}</td>
-
-            <!-- FIX: TOTAL VIEWS -->
-            <td>${d.TotalViews||0}</td>
-
-            <td style="color:#38bdf8">${d.ViewGrowth||0}</td>
-
-            <td>
-                ${d.Viral=="YES"
-                    ? "🔥"
-                    : d.Flop=="YES"
-                    ? "❌"
-                    : "⚖️"}
+        <tr class="${hot ? 'hot' : ''} ${rising ? 'rising' : ''}">
+            <td onclick="openChart('${d.Username}')" style="cursor:pointer">
+                ${d.Username}
             </td>
-        </tr>`;
+            <td>${safe(d.Followers)}</td>
+            <td>${safe(d.TotalViews)}</td>
+            <td>${safe(d.ViewGrowth)}</td>
+            <td>${d.AI}</td>
+        </tr>
+        `;
+    });
+}
+
+// ================= TOP TREND =================
+function renderTop(){
+
+    let top = [...DATA]
+        .sort((a,b)=>b.AI - a.AI)
+        .slice(0,5);
+
+    document.getElementById("topBox").innerHTML =
+        top.map(d =>
+            `🔥 <b>${d.Username}</b> - Score: ${d.AI} - Views: ${d.TotalViews}`
+        ).join("<br>");
+}
+
+// ================= HEATMAP =================
+function renderHeatmap(){
+
+    let el = document.getElementById("heatmap");
+    el.innerHTML = "";
+
+    DATA.slice(0,7).forEach(d => {
+
+        let intensity = Math.min(d.ViewGrowth / 3000, 1);
+
+        el.innerHTML += `
+        <div class="cell"
+        style="background:rgba(34,197,94,${intensity})"></div>
+        `;
     });
 }
 
 // ================= CHART =================
-function renderChart(){
-    let labels = DATA.map(d=>d.Username);
-    let views = DATA.map(d=>d.TotalViews||0);
+async function openChart(user){
 
-    if(chart) chart.destroy();
+    let res = await fetch("/api/history");
+    let history = await res.json();
 
-    chart = new Chart(document.getElementById("chart"), {
-        type:"bar",
-        data:{
+    let filtered = history.filter(x => x[1] == user);
+
+    let labels = filtered.map(x => x[0]);
+    let views = filtered.map(x => parseInt(x[5]) || 0);
+
+    new Chart(document.getElementById("chart"), {
+        type: "line",
+        data: {
             labels,
-            datasets:[{
-                label:"Views",
-                data:views
+            datasets: [{
+                label: user,
+                data: views,
+                borderColor: "#22c55e",
+                tension: 0.3
             }]
         }
     });
 }
 
-// ================= CLICK CHART =================
-async function openChart(user){
-
-    document.getElementById("modal").style.display="block";
-    document.getElementById("modalTitle").innerText=user;
-
-    let res = await fetch(`/api/history`);
-    let data = await res.json();
-
-    let filtered = data.filter(r=>r[1]==user);
-
-    let labels = filtered.map(r=>r[0]);
-    let views = filtered.map(r=>parseInt(r[5])||0);
-
-    if(modalChart) modalChart.destroy();
-
-    modalChart = new Chart(document.getElementById("modalChart"),{
-        type:"line",
-        data:{
-            labels,
-            datasets:[{label:"Views",data:views}]
-        }
-    });
-}
-
-function closeModal(){
-    document.getElementById("modal").style.display="none";
-}
-
-// ================= DRAG =================
-interact('.draggable').draggable({
-    listeners:{
-        move(event){
-            let target = event.target;
-
-            let x = (parseFloat(target.dataset.x)||0)+event.dx;
-            let y = (parseFloat(target.dataset.y)||0)+event.dy;
-
-            target.style.transform=`translate(${x}px,${y}px)`;
-
-            target.dataset.x=x;
-            target.dataset.y=y;
-        }
-    }
-});
-
-// ================= SAVE LAYOUT =================
-function saveLayout(){
-    let layout=[];
-
-    document.querySelectorAll('.draggable').forEach(el=>{
-        layout.push({
-            id:el.id,
-            x:el.dataset.x||0,
-            y:el.dataset.y||0
-        });
-    });
-
-    localStorage.setItem("layout",JSON.stringify(layout));
-}
-
-// ================= LOAD LAYOUT =================
-function loadLayout(){
-    let layout=JSON.parse(localStorage.getItem("layout")||"[]");
-
-    layout.forEach(i=>{
-        let el=document.getElementById(i.id);
-        if(!el) return;
-
-        el.style.transform=`translate(${i.x}px,${i.y}px)`;
-        el.dataset.x=i.x;
-        el.dataset.y=i.y;
-    });
-}
-
-// INIT
-loadData();
-setInterval(loadData,30000);
+// ================= AUTO REFRESH =================
+load();
+setInterval(load, 30000);
 
 </script>
 
