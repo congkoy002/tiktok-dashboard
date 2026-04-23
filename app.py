@@ -8,8 +8,8 @@ app = Flask(__name__)
 SPREADSHEET_ID = '1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc'
 
 # ===== TELEGRAM =====
-TOKEN = "8775825908:AAHhtdm8t01gB3Vto47EaDnL4Ogz-iKgFFc"
-CHAT_ID = "YOUR_CHAT_ID"
+TOKEN = "8736136206:AAERH3X6xt423SnEdL4rOey-RM37L2_uwhk"
+CHAT_ID = "6839559152"
 
 sent_cache = {}
 
