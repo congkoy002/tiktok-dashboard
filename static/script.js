@@ -2,10 +2,14 @@
 
 let chart;
 let userChart;
+let globalData = [];
 
 async function fetchData(){
   const res = await fetch(API_URL);
   const data = await res.json();
+
+  globalData = data;
+
   renderDashboard(data);
 }
 
@@ -19,8 +23,23 @@ function renderDashboard(data){
   const best = data.reduce((a,b)=> a.Score > b.Score ? a : b);
   document.getElementById("bestChannel").innerText = best.Username;
 
+  renderTop(data);
   renderTable(data);
   renderChart(data);
+}
+
+function renderTop(data){
+
+  const top = [...data]
+    .sort((a,b)=> b.ViewGrowth - a.ViewGrowth)
+    .slice(0,10);
+
+  const ul = document.getElementById("topList");
+  ul.innerHTML = "";
+
+  top.forEach(d=>{
+    ul.innerHTML += `<li>${d.Username} (+${d.ViewGrowth})</li>`;
+  });
 }
 
 function formatGrowth(v){
@@ -57,13 +76,38 @@ function renderChart(data){
     data:{
       labels:data.map(d=>d.Username),
       datasets:[
-        {type:'bar',label:'Views',data:data.map(d=>Number(d.TotalViews))},
-        {type:'line',label:'Growth',data:data.map(d=>Number(d.ViewGrowth))}
+        {
+          type:'bar',
+          label:'Views',
+          data:data.map(d=>Number(d.TotalViews))
+        },
+        {
+          type:'line',
+          label:'Growth',
+          data:data.map(d=>Number(d.ViewGrowth))
+        }
       ]
     }
   });
 }
 
+// ================= SEARCH =================
+document.addEventListener("DOMContentLoaded", ()=>{
+  const input = document.getElementById("searchInput");
+
+  input.addEventListener("input", e=>{
+    const keyword = e.target.value.toLowerCase();
+
+    const filtered = globalData.filter(d =>
+      d.Username.toLowerCase().includes(keyword)
+    );
+
+    renderTable(filtered);
+    renderChart(filtered);
+  });
+});
+
+// ================= USER DETAIL =================
 async function openUser(username){
 
   document.getElementById("userModal").style.display="block";
@@ -81,6 +125,7 @@ async function openUser(username){
   renderUserChart(labels,views,growth);
 }
 
+// ================= FIX CHART USER =================
 function renderUserChart(labels,views,growth){
 
   const ctx=document.getElementById("userChart").getContext("2d");
@@ -91,8 +136,17 @@ function renderUserChart(labels,views,growth){
     data:{
       labels,
       datasets:[
-        {type:'line',label:'Views',data:views},
-        {type:'line',label:'Growth',data:growth}
+        {
+          type:'bar',
+          label:'Views',
+          data:views
+        },
+        {
+          type:'line',
+          label:'Growth',
+          data:growth,
+          tension:0.4
+        }
       ]
     }
   });
