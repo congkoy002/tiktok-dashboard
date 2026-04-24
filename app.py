@@ -18,7 +18,7 @@ def sheet():
         )
     )
 
-# ================= HOME (FIX NOT FOUND) =================
+# ================= HOME =================
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -43,7 +43,7 @@ def data():
 
     def n(x):
         try:
-            return int(float(x))
+            return int(float(str(x).replace(",", "")))
         except:
             return 0
 
@@ -74,6 +74,11 @@ def data():
 
     return jsonify(out)
 
+# ================= /data alias =================
+@app.route("/data")
+def data_alias():
+    return data()
+
 # ================= HISTORY =================
 @app.route("/api/history")
 def history():
@@ -81,7 +86,7 @@ def history():
 
     rows = s.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="Kenh!A2:Q"
+        range="History!A2:Q"
     ).execute().get("values", [])
 
     return jsonify(rows)

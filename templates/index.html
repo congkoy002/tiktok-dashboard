@@ -2,177 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TikTok AI Dashboard</title>
-
+<title>🚀 TikTok Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #0b1220;
-    color: white;
-}
-
-.header {
-    padding: 15px;
-    background: #111827;
-    font-weight: bold;
-}
-
-.container {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 15px;
-    padding: 15px;
-}
-
-.card {
-    background: #1f2937;
-    padding: 15px;
-    border-radius: 10px;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #111827;
-}
-
-th, td {
-    padding: 10px;
-    text-align: center;
-    border-bottom: 1px solid #222;
-}
-
-tr:hover {
-    background: #1e293b;
-    cursor: pointer;
-}
-
-.viral { color:#22c55e; font-weight:bold; }
-.flop { color:#ef4444; font-weight:bold; }
-.normal { color:#38bdf8; }
-
+body{background:#0f172a;color:#fff;font-family:Arial;padding:20px}
+.card{background:#1e293b;padding:15px;border-radius:10px;margin-bottom:20px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:10px;border-bottom:1px solid #333;text-align:center}
+tr:hover{background:#334155}
 </style>
 </head>
 
 <body>
 
-<div class="header">🚀 TikTok AI Dashboard</div>
+<h1>🚀 TikTok Dashboard</h1>
 
-<div class="container">
-
-    <div>
-        <div class="card">
-            <h3>🏆 Best Channel</h3>
-            <div id="bestBox">Loading...</div>
-        </div>
-
-        <div class="card">
-            <h3>📊 Selected User</h3>
-            <div id="userBox">Click username</div>
-        </div>
-    </div>
-
-    <div>
-
-        <canvas id="chart"></canvas>
-
-        <br><br>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>User</th>
-                    <th>Followers</th>
-                    <th>Views</th>
-                    <th>Last</th>
-                    <th>Score</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-
-            <tbody id="tbody"></tbody>
-        </table>
-
-    </div>
-
+<div class="card">
+  <div>🏆 Best: <span id="bestChannel"></span></div>
+  <div>📊 Total: <span id="totalChannels"></span></div>
+  <div>🔥 Viral: <span id="viralCount"></span></div>
 </div>
 
-<script>
+<div class="card">
+  <canvas id="mainChart"></canvas>
+</div>
 
-let chart;
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>User</th>
+<th>Followers</th>
+<th>Likes</th>
+<th>Views</th>
+<th>Growth</th>
+<th>Score</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+</div>
 
-async function loadData(){
+<!-- MODAL -->
+<div id="userModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8)">
+<div style="width:80%;margin:50px auto;background:#1e293b;padding:20px;border-radius:10px">
+<h2 id="modalTitle"></h2>
+<canvas id="userChart"></canvas>
+<button onclick="closeModal()">Close</button>
+</div>
+</div>
 
-    let res = await fetch('/api/data');
-    let data = await res.json();
-
-    if(!data.length) return;
-
-    // BEST
-    let best = data.reduce((a,b)=> (a.Score||0) > (b.Score||0) ? a : b);
-
-    document.getElementById("bestBox").innerHTML = `
-        <h3>${best.Username}</h3>
-        <div>Score: ${best.Score}</div>
-        <div>Views: ${best.TotalViews}</div>
-        <div>${best.Status}</div>
-    `;
-
-    // TABLE
-    let tbody = document.getElementById("tbody");
-    tbody.innerHTML = "";
-
-    data.forEach(d=>{
-    tbody.innerHTML += `
-    <tr onclick="selectUser('${d.Username}')">
-        <td>${d.Username}</td>
-        <td>${d.Followers}</td>
-        <td>${d.TotalViews}</td>
-        <td>${d.LastView}</td>
-        <td>${d.Score}</td>
-        <td>
-            ${d.IsViral === "YES" ? "🔥 VIRAL" :
-              d.FlopStatus === "YES" ? "❌ FLOP" :
-              "⚖️ NORMAL"}
-        </td>
-    </tr>`;
-});
-}
-
-async function selectUser(username){
-
-    let res = await fetch('/api/history');
-    let data = await res.json();
-
-    let userData = data.filter(r=>r[0]===username);
-
-    let views = userData.map(r => parseInt(r[5] || 0));
-
-    document.getElementById("userBox").innerHTML =
-        `<b>${username}</b>`;
-
-    if(chart) chart.destroy();
-
-    chart = new Chart(document.getElementById("chart"),{
-        type:'line',
-        data:{
-            labels: views.map((_,i)=>i),
-            datasets:[{
-                label:"Views",
-                data: views,
-                borderColor:"#38bdf8"
-            }]
-        }
-    });
-}
-
-loadData();
-setInterval(loadData, 60000);
-
-</script>
+<script src="/static/script.js"></script>
 
 </body>
 </html>

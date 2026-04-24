@@ -30,6 +30,55 @@ function parseNumber(t){
   return parseFloat(t)||0;
 }
 
+// ================= 🆕 CAPTCHA DETECT =================
+async function detectCaptcha(page){
+  try{
+    const html = await page.content();
+    if(
+      html.includes("captcha") ||
+      html.includes("verify") ||
+      html.includes("robot")
+    ){
+      return true;
+    }
+    return false;
+  }catch{
+    return false;
+  }
+}
+
+// ================= 🆕 HUMAN DELAY =================
+function randomDelay(min = 800, max = 2500){
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+async function humanDelay(min = 800, max = 2500){
+  await new Promise(r => setTimeout(r, randomDelay(min, max)));
+}
+
+// ================= 🆕 HUMAN SCROLL =================
+async function humanScroll(page){
+  try{
+    const scrollCount = Math.floor(Math.random() * 5) + 4;
+
+    for(let i = 0; i < scrollCount; i++){
+      const distance = Math.floor(Math.random() * 800) + 300;
+
+      await page.mouse.wheel(0, distance);
+      await humanDelay(600, 1800);
+
+      if(Math.random() > 0.7){
+        await humanDelay(1500, 3000);
+      }
+    }
+
+    await page.mouse.wheel(0, -500);
+
+  }catch(e){
+    console.log("Scroll error:", e.message);
+  }
+}
+
 // ================= GET DATA =================
 async function getOldData(){
   const res = await sheets.spreadsheets.values.get({
@@ -89,15 +138,53 @@ async function getUsers(){
 
     try{
 
-      await page.goto(`https://www.tiktok.com/@${u}`,{
-        waitUntil:"domcontentloaded"
-      });
+      // ================= 🆕 HUMAN DELAY GIỮA USER =================
+      await humanDelay(1500, 4000);
 
-      await page.waitForTimeout(3000);
+      // ================= FIX TIMEOUT =================
+      await Promise.race([
+        page.goto(`https://www.tiktok.com/@${u}`,{
+          waitUntil:"domcontentloaded"
+        }),
+        new Promise((_, reject)=>
+          setTimeout(()=>reject(new Error("Timeout")),15000)
+        )
+      ]);
+
+      // ================= CAPTCHA CHECK =================
+      if(await detectCaptcha(page)){
+        console.log("⚠ CAPTCHA detected:", u);
+
+        await page.waitForTimeout(3000);
+
+        if(await detectCaptcha(page)){
+          console.log("❌ CAPTCHA chưa solve -> skip + đổi profile");
+
+          profileIndex = (profileIndex + 1) % chromeProfiles.length;
+          await openProfile(chromeProfiles[profileIndex]);
+
+          continue;
+        }else{
+          console.log("✅ CAPTCHA solved");
+        }
+      }
+
+      // ================= 🆕 HUMAN DELAY SAU LOAD =================
+      await humanDelay(2000, 4000);
+
+      await page.waitForSelector('[data-e2e="followers-count"]', {
+        timeout: 10000
+      }).catch(()=>{});
+
+      // ================= 🆕 DELAY NHẸ =================
+      await humanDelay(1000, 2000);
 
       const followers = await page.locator('[data-e2e="followers-count"]').innerText().catch(()=>0);
       const following = await page.locator('[data-e2e="following-count"]').innerText().catch(()=>0);
       const likes = await page.locator('[data-e2e="likes-count"]').innerText().catch(()=>0);
+
+      // ================= 🆕 HUMAN SCROLL =================
+      await humanScroll(page);
 
       const viewsRaw = await page.$$eval(
         '[data-e2e="user-post-item"] strong',
@@ -112,18 +199,15 @@ async function getUsers(){
 
       const last3 = views.slice(0,3);
 
-      // ================= FLOP / VIRAL =================
       const flop = (last3.length===3 && last3.every(v=>v<50)) ? "YES":"NO";
       const viral = (last3.length===3 && last3.every(v=>v>2000)) ? "YES":"NO";
 
-      // ================= GROWTH =================
       const old = oldData[u] || {followers:0,likes:0,views:0};
 
       const followerGrowth = parseNumber(followers) - old.followers;
       const likeGrowth = parseNumber(likes) - old.likes;
       const viewGrowth = totalViews - old.views;
 
-      // ================= SCORE =================
       let score = 0;
       if(viral==="YES") score += 50;
       if(flop==="YES") score -= 30;
@@ -159,7 +243,7 @@ async function getUsers(){
       console.log("OK:",u);
 
     }catch(e){
-      console.log("ERR:",u);
+      console.log("ERR:",u, e.message);
     }
   }
 
