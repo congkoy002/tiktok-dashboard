@@ -126,25 +126,20 @@ async function loadData(){
     tbody.innerHTML = "";
 
     data.forEach(d=>{
-
-        let cls =
-            d.Viral === "YES" ? "viral" :
-            d.Flop === "YES" ? "flop" :
-            "normal";
-
-        tbody.innerHTML += `
-        <tr onclick="selectUser('${d.Username}')">
-            <td>${d.Username}</td>
-            <td>${d.Followers}</td>
-            <td>${d.TotalViews}</td>
-            <td>${d.LastView}</td>
-            <td>${d.Score}</td>
-            <td class="${cls}">
-                ${d.Viral==="YES"?"🔥 VIRAL":
-                  d.Flop==="YES"?"❌ FLOP":"⚖️ NORMAL"}
-            </td>
-        </tr>`;
-    });
+    tbody.innerHTML += `
+    <tr onclick="selectUser('${d.Username}')">
+        <td>${d.Username}</td>
+        <td>${d.Followers}</td>
+        <td>${d.TotalViews}</td>
+        <td>${d.LastView}</td>
+        <td>${d.Score}</td>
+        <td>
+            ${d.IsViral === "YES" ? "🔥 VIRAL" :
+              d.FlopStatus === "YES" ? "❌ FLOP" :
+              "⚖️ NORMAL"}
+        </td>
+    </tr>`;
+});
 }
 
 async function selectUser(username){
@@ -154,7 +149,7 @@ async function selectUser(username){
 
     let userData = data.filter(r=>r[0]===username);
 
-    let views = userData.map(r=>parseInt(r[5]||0));
+    let views = userData.map(r => parseInt(r[5] || 0));
 
     document.getElementById("userBox").innerHTML =
         `<b>${username}</b>`;
