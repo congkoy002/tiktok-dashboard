@@ -30,7 +30,7 @@ function parseNumber(t){
   return parseFloat(t)||0;
 }
 
-// ================= 🆕 CAPTCHA DETECT =================
+// ================= CAPTCHA DETECT =================
 async function detectCaptcha(page){
   try{
     const html = await page.content();
@@ -47,7 +47,7 @@ async function detectCaptcha(page){
   }
 }
 
-// ================= 🆕 HUMAN DELAY =================
+// ================= HUMAN DELAY =================
 function randomDelay(min = 800, max = 2500){
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -56,19 +56,39 @@ async function humanDelay(min = 800, max = 2500){
   await new Promise(r => setTimeout(r, randomDelay(min, max)));
 }
 
-// ================= 🆕 HUMAN SCROLL =================
+// ================= 🚀 UPDATED HUMAN SCROLL =================
 async function humanScroll(page){
   try{
-    const scrollCount = Math.floor(Math.random() * 5) + 4;
+    let lastCount = 0;
+    let sameCount = 0;
+    const maxSame = 3;
 
-    for(let i = 0; i < scrollCount; i++){
-      const distance = Math.floor(Math.random() * 800) + 300;
+    while(true){
 
-      await page.mouse.wheel(0, distance);
-      await humanDelay(600, 1800);
+      await page.mouse.wheel(0, Math.floor(Math.random()*1000)+800);
+      await humanDelay(1000, 2000);
+
+      const count = await page.$$eval(
+        '[data-e2e="user-post-item"]',
+        els => els.length
+      ).catch(()=>0);
+
+      console.log("📦 Loaded videos:", count);
+
+      if(count === lastCount){
+        sameCount++;
+      }else{
+        sameCount = 0;
+        lastCount = count;
+      }
+
+      if(sameCount >= maxSame){
+        console.log("✅ Scroll done");
+        break;
+      }
 
       if(Math.random() > 0.7){
-        await humanDelay(1500, 3000);
+        await humanDelay(2000, 4000);
       }
     }
 
@@ -138,10 +158,8 @@ async function getUsers(){
 
     try{
 
-      // ================= 🆕 HUMAN DELAY GIỮA USER =================
       await humanDelay(1500, 4000);
 
-      // ================= FIX TIMEOUT =================
       await Promise.race([
         page.goto(`https://www.tiktok.com/@${u}`,{
           waitUntil:"domcontentloaded"
@@ -151,40 +169,36 @@ async function getUsers(){
         )
       ]);
 
-      // ================= CAPTCHA CHECK =================
       if(await detectCaptcha(page)){
         console.log("⚠ CAPTCHA detected:", u);
 
         await page.waitForTimeout(3000);
 
         if(await detectCaptcha(page)){
-          console.log("❌ CAPTCHA chưa solve -> skip + đổi profile");
+          console.log("❌ CAPTCHA chưa solve -> skip");
 
           profileIndex = (profileIndex + 1) % chromeProfiles.length;
           await openProfile(chromeProfiles[profileIndex]);
 
           continue;
-        }else{
-          console.log("✅ CAPTCHA solved");
         }
       }
 
-      // ================= 🆕 HUMAN DELAY SAU LOAD =================
       await humanDelay(2000, 4000);
 
       await page.waitForSelector('[data-e2e="followers-count"]', {
         timeout: 10000
       }).catch(()=>{});
 
-      // ================= 🆕 DELAY NHẸ =================
       await humanDelay(1000, 2000);
 
       const followers = await page.locator('[data-e2e="followers-count"]').innerText().catch(()=>0);
       const following = await page.locator('[data-e2e="following-count"]').innerText().catch(()=>0);
       const likes = await page.locator('[data-e2e="likes-count"]').innerText().catch(()=>0);
 
-      // ================= 🆕 HUMAN SCROLL =================
+      // ===== 🆕 SCROLL LOAD FULL VIDEO =====
       await humanScroll(page);
+      await humanDelay(1500, 3000);
 
       const viewsRaw = await page.$$eval(
         '[data-e2e="user-post-item"] strong',

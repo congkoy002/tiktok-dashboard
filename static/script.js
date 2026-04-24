@@ -4,6 +4,12 @@ let chart;
 let userChart;
 let globalData = [];
 
+// ================= 🧠 DETECT SPIKE =================
+function detectSpikes(data){
+  const avg = data.reduce((a,b)=>a+b,0) / (data.length || 1);
+  return data.map(v => v > avg * 2 ? v : null);
+}
+
 async function fetchData(){
   const res = await fetch(API_URL);
   const data = await res.json();
@@ -66,11 +72,16 @@ function renderTable(data){
   });
 }
 
+// ================= MAIN CHART (ZOOM + SPIKE) =================
 function renderChart(data){
 
   const ctx=document.getElementById("mainChart").getContext("2d");
 
   if(chart) chart.destroy();
+
+  const views = data.map(d=>Number(d.TotalViews));
+  const growth = data.map(d=>Number(d.ViewGrowth));
+  const spikes = detectSpikes(growth);
 
   chart=new Chart(ctx,{
     data:{
@@ -79,14 +90,48 @@ function renderChart(data){
         {
           type:'bar',
           label:'Views',
-          data:data.map(d=>Number(d.TotalViews))
+          data:views
         },
         {
           type:'line',
           label:'Growth',
-          data:data.map(d=>Number(d.ViewGrowth))
+          data:growth,
+          tension:0.3
+        },
+        {
+          type:'scatter',
+          label:'🔥 Spike',
+          data:spikes,
+          pointRadius:6,
+          pointBackgroundColor:'red'
         }
       ]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        tooltip:{
+          backgroundColor:"#111",
+          titleColor:"#fff",
+          bodyColor:"#0f0",
+          borderColor:"#555",
+          borderWidth:1,
+          callbacks:{
+            label:(ctx)=>`${ctx.dataset.label}: ${ctx.raw?.toLocaleString?.() || ctx.raw}`
+          }
+        },
+        zoom:{
+          pan:{enabled:true,mode:'x'},
+          zoom:{
+            drag:{
+              enabled:true,
+              backgroundColor:'rgba(0,255,255,0.2)'
+            },
+            wheel:{enabled:true},
+            mode:'x'
+          }
+        }
+      }
     }
   });
 }
@@ -107,6 +152,24 @@ document.addEventListener("DOMContentLoaded", ()=>{
   });
 });
 
+// ================= GROUP BY DAY =================
+function groupByDay(labels, values){
+
+  const map = {};
+
+  labels.forEach((d, i)=>{
+    const day = new Date(d).toISOString().split("T")[0];
+
+    if(!map[day]) map[day] = 0;
+    map[day] += values[i];
+  });
+
+  return {
+    labels: Object.keys(map),
+    values: Object.values(map)
+  };
+}
+
 // ================= USER DETAIL =================
 async function openUser(username){
 
@@ -116,38 +179,78 @@ async function openUser(username){
   const res=await fetch(API_URL.replace("/data","/api/history"));
   const history=await res.json();
 
-  const userData=history.filter(r=>r[0]===username);
+  const userData = history.filter(r => r[0] === username);
 
-  const labels=userData.map(r=>r[16]);
-  const views=userData.map(r=>Number(r[5]));
-  const growth=userData.map(r=>Number(r[10]));
+  if(!userData.length){
+    console.log("No history data");
+    return;
+  }
 
-  renderUserChart(labels,views,growth);
+  const labels = userData.map(r => new Date(r[16]));
+  const views = userData.map(r => Number(r[5]) || 0);
+  const growth = userData.map(r => Number(r[10]) || 0);
+
+  renderUserChart(labels, views, growth);
 }
 
-// ================= FIX CHART USER =================
+// ================= USER CHART =================
 function renderUserChart(labels,views,growth){
 
   const ctx=document.getElementById("userChart").getContext("2d");
 
   if(userChart) userChart.destroy();
 
+  const v = groupByDay(labels, views);
+  const g = groupByDay(labels, growth);
+  const spikes = detectSpikes(g.values);
+
   userChart=new Chart(ctx,{
     data:{
-      labels,
+      labels:v.labels,
       datasets:[
         {
           type:'bar',
           label:'Views',
-          data:views
+          data:v.values
         },
         {
           type:'line',
           label:'Growth',
-          data:growth,
+          data:g.values,
           tension:0.4
+        },
+        {
+          type:'scatter',
+          label:'🔥 Spike',
+          data:spikes,
+          pointRadius:6,
+          pointBackgroundColor:'red'
         }
       ]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        tooltip:{
+          backgroundColor:"#111",
+          titleColor:"#fff",
+          bodyColor:"#0f0",
+          callbacks:{
+            label:(ctx)=>`${ctx.dataset.label}: ${ctx.raw?.toLocaleString?.() || ctx.raw}`
+          }
+        },
+        zoom:{
+          pan:{enabled:true,mode:'x'},
+          zoom:{
+            drag:{
+              enabled:true,
+              backgroundColor:'rgba(255,0,0,0.2)'
+            },
+            wheel:{enabled:true},
+            mode:'x'
+          }
+        }
+      }
     }
   });
 }
@@ -155,6 +258,12 @@ function renderUserChart(labels,views,growth){
 function closeModal(){
   document.getElementById("userModal").style.display="none";
 }
+
+// ================= RESET ZOOM =================
+document.addEventListener("dblclick", ()=>{
+  if(chart) chart.resetZoom();
+  if(userChart) userChart.resetZoom();
+});
 
 fetchData();
 setInterval(fetchData,60000);

@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <title>🚀 TikTok Dashboard</title>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- ✅ THÊM plugin zoom -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
 
 <style>
 body{background:#0f172a;color:#fff;font-family:Arial;padding:20px}
@@ -24,12 +28,10 @@ tr:hover{background:#334155}
   <div>🔥 Viral: <span id="viralCount"></span></div>
 </div>
 
-<!-- 🆕 SEARCH -->
 <div class="card">
   🔍 <input id="searchInput" placeholder="Search username..." style="padding:8px;width:250px">
 </div>
 
-<!-- 🆕 TOP -->
 <div class="card">
   🔥 Top 10 Growing:
   <ul id="topList"></ul>
@@ -56,7 +58,6 @@ tr:hover{background:#334155}
 </table>
 </div>
 
-<!-- MODAL -->
 <div id="userModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8)">
 <div style="width:80%;margin:50px auto;background:#1e293b;padding:20px;border-radius:10px">
 <h2 id="modalTitle"></h2>
