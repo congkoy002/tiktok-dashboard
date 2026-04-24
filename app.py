@@ -7,7 +7,6 @@ app = Flask(__name__)
 
 SPREADSHEET_ID = "1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc"
 
-# ================= SHEET =================
 def sheet():
     creds = json.loads(os.environ["GOOGLE_CREDENTIALS"])
     return build(
@@ -18,13 +17,11 @@ def sheet():
         )
     )
 
-# ================= HOME =================
 @app.route("/")
 def home():
     return render_template("index.html")
 
-# ================= DATA API =================
-@app.route("/api/data")
+@app.route("/data")
 def data():
     s = sheet()
 
@@ -43,7 +40,7 @@ def data():
 
     def n(x):
         try:
-            return int(float(str(x).replace(",", "")))
+            return int(float(x))
         except:
             return 0
 
@@ -63,10 +60,8 @@ def data():
             "LikeGrowth": n(g(r,9)),
             "ViewGrowth": n(g(r,10)),
             "Last3Views": g(r,11),
-
             "FlopStatus": g(r,12),
             "IsViral": g(r,13),
-
             "Score": n(g(r,14)),
             "ChannelStatus": g(r,15),
             "LastUpdate": g(r,16)
@@ -74,28 +69,43 @@ def data():
 
     return jsonify(out)
 
-# ================= /data alias =================
-@app.route("/data")
-def data_alias():
-    return data()
-
-# ================= HISTORY =================
+# ✅ FIX CHỈ Ở ĐÂY
 @app.route("/api/history")
 def history():
     s = sheet()
 
     rows = s.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="History!A2:Q"
+        range="Kenh!A2:Q"
     ).execute().get("values", [])
 
-    return jsonify(rows)
+    def g(r, i):
+        return r[i] if i < len(r) else ""
 
-# ================= HEALTH =================
+    def n(x):
+        try:
+            return int(float(x))
+        except:
+            return 0
+
+    out = []
+
+    for r in rows:
+        if not r:
+            continue
+
+        out.append({
+            "Username": g(r,0),
+            "TotalViews": n(g(r,5)),
+            "ViewGrowth": n(g(r,10)),
+            "LastUpdate": g(r,16)
+        })
+
+    return jsonify(out)
+
 @app.route("/health")
 def health():
     return {"status": "ok"}
 
-# ================= RUN =================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)

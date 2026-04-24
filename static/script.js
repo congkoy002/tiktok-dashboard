@@ -158,10 +158,12 @@ function groupByDay(labels, values){
   const map = {};
 
   labels.forEach((d, i)=>{
+    if(!d) return;
+
     const day = new Date(d).toISOString().split("T")[0];
 
     if(!map[day]) map[day] = 0;
-    map[day] += values[i];
+    map[day] += Number(values[i]) || 0;
   });
 
   return {
@@ -169,26 +171,30 @@ function groupByDay(labels, values){
     values: Object.values(map)
   };
 }
-
 // ================= USER DETAIL =================
 async function openUser(username){
 
   document.getElementById("userModal").style.display="block";
   document.getElementById("modalTitle").innerText=username;
 
-  const res=await fetch(API_URL.replace("/data","/api/history"));
-  const history=await res.json();
+  const res = await fetch(API_URL.replace("/data","/api/history"));
+  const history = await res.json();
 
-  const userData = history.filter(r => r[0] === username);
+  const userData = history.filter(d => d.Username === username);
 
   if(!userData.length){
     console.log("No history data");
     return;
   }
 
-  const labels = userData.map(r => new Date(r[16]));
-  const views = userData.map(r => Number(r[5]) || 0);
-  const growth = userData.map(r => Number(r[10]) || 0);
+  // sort theo thời gian
+  userData.sort((a,b)=> new Date(a.LastUpdate) - new Date(b.LastUpdate));
+
+  const labels = userData.map(d => new Date(d.LastUpdate));
+  const views = userData.map(d => Number(d.TotalViews) || 0);
+  const growth = userData.map(d => Number(d.ViewGrowth) || 0);
+
+  console.log("DEBUG:", userData);
 
   renderUserChart(labels, views, growth);
 }
@@ -196,12 +202,18 @@ async function openUser(username){
 // ================= USER CHART =================
 function renderUserChart(labels,views,growth){
 
+  // ✅ DEBUG ĐẶT Ở ĐÂY
+  console.log("LABELS:", labels);
+  console.log("VIEWS:", views);
+  console.log("GROWTH:", growth);
+
   const ctx=document.getElementById("userChart").getContext("2d");
 
   if(userChart) userChart.destroy();
 
   const v = groupByDay(labels, views);
   const g = groupByDay(labels, growth);
+
   const spikes = detectSpikes(g.values);
 
   userChart=new Chart(ctx,{
@@ -231,21 +243,10 @@ function renderUserChart(labels,views,growth){
     options:{
       responsive:true,
       plugins:{
-        tooltip:{
-          backgroundColor:"#111",
-          titleColor:"#fff",
-          bodyColor:"#0f0",
-          callbacks:{
-            label:(ctx)=>`${ctx.dataset.label}: ${ctx.raw?.toLocaleString?.() || ctx.raw}`
-          }
-        },
         zoom:{
           pan:{enabled:true,mode:'x'},
           zoom:{
-            drag:{
-              enabled:true,
-              backgroundColor:'rgba(255,0,0,0.2)'
-            },
+            drag:{enabled:true},
             wheel:{enabled:true},
             mode:'x'
           }
@@ -254,7 +255,6 @@ function renderUserChart(labels,views,growth){
     }
   });
 }
-
 function closeModal(){
   document.getElementById("userModal").style.display="none";
 }
