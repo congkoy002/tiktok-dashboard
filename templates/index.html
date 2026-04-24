@@ -2,284 +2,238 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TikTok AI Dashboard PRO</title>
+<title>TikTok AI Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{
-    background:#0b1220;
-    color:#fff;
-    font-family:Arial;
-    padding:20px;
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #0b1220;
+    color: white;
 }
 
-h1{
-    text-align:center;
+/* HEADER */
+.header {
+    padding: 20px;
+    background: #111827;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.container{
-    display:grid;
-    grid-template-columns:1fr 2fr;
-    gap:15px;
+.title {
+    font-size: 20px;
+    font-weight: bold;
 }
 
-/* ================= CARD ================= */
-.card{
-    background:rgba(255,255,255,0.05);
-    padding:15px;
-    border-radius:12px;
+/* GRID */
+.container {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 20px;
 }
 
-/* ================= TABLE ================= */
-table{
-    width:100%;
-    border-collapse:collapse;
+/* LEFT PANEL */
+.card {
+    background: #1f2937;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 15px;
 }
 
-th,td{
-    padding:10px;
-    text-align:center;
+/* TABLE */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #111827;
+    border-radius: 10px;
+    overflow: hidden;
 }
 
-th{
-    background:#1e293b;
+th, td {
+    padding: 10px;
+    text-align: center;
+    border-bottom: 1px solid #222;
 }
 
-tr{
-    transition:all .3s ease;
+th {
+    background: #1f2937;
+    cursor: pointer;
 }
 
-tr:hover{
-    background:rgba(255,255,255,0.08);
+tr:hover {
+    background: #1e293b;
+    cursor: pointer;
 }
 
-/* ================= HIGHLIGHT ================= */
-.hot{
-    background:rgba(34,197,94,0.15);
-    border-left:3px solid #22c55e;
+/* HIGHLIGHT */
+.viral {
+    color: #22c55e;
+    font-weight: bold;
 }
 
-.rising{
-    background:rgba(59,130,246,0.15);
-    border-left:3px solid #3b82f6;
+.flop {
+    color: #ef4444;
+    font-weight: bold;
 }
 
-/* ================= TOP BOX ================= */
-#topBox{
-    font-size:14px;
-    line-height:1.6;
+.growing {
+    color: #38bdf8;
 }
 
-/* ================= CHART ================= */
-canvas{
-    width:100%;
+/* CHART */
+.chartBox {
+    background: #111827;
+    padding: 15px;
+    border-radius: 12px;
 }
 
-/* ================= HEATMAP ================= */
-#heatmap{
-    display:grid;
-    grid-template-columns:repeat(7,1fr);
-    gap:4px;
-    margin-top:10px;
+/* BEST */
+.best {
+    font-size: 16px;
+    color: #facc15;
 }
 
-.cell{
-    height:18px;
-    border-radius:3px;
-}
-
-/* ================= ANIMATION ================= */
-@keyframes glow {
-    0% { transform:scale(1); }
-    50% { transform:scale(1.02); }
-    100% { transform:scale(1); }
-}
-
-.animated{
-    animation:glow 1s infinite;
-}
 </style>
 </head>
 
 <body>
 
-<h1>🚀 TikTok AI Dashboard PRO</h1>
+<div class="header">
+    <div class="title">🚀 TikTok AI Dashboard</div>
+    <div id="status">Live</div>
+</div>
 
 <div class="container">
 
-<!-- LEFT -->
-<div>
+    <!-- LEFT -->
+    <div>
 
-<div class="card">
-<h3>🔥 Top Trending</h3>
-<div id="topBox"></div>
-</div>
+        <div class="card">
+            <h3>🏆 Best Channel</h3>
+            <div id="bestBox">Loading...</div>
+        </div>
 
-<div class="card">
-<h3>📊 Heatmap Growth</h3>
-<div id="heatmap"></div>
-</div>
+        <div class="card">
+            <h3>📊 Selected User</h3>
+            <div id="userBox">Click a username</div>
+        </div>
 
-</div>
+    </div>
 
-<!-- RIGHT -->
-<div>
+    <!-- RIGHT -->
+    <div>
 
-<div class="card">
-<canvas id="chart"></canvas>
-</div>
+        <div class="chartBox">
+            <canvas id="chart"></canvas>
+        </div>
 
-<div class="card">
-<table>
-<thead>
-<tr>
-<th>User</th>
-<th>Followers</th>
-<th>Views</th>
-<th>Growth</th>
-<th>AI Score</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
-</div>
+        <br>
 
-</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Followers</th>
+                    <th>Views</th>
+                    <th>Last</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+
+    </div>
+
 </div>
 
 <script>
 
-let DATA=[];
+let chart;
 
-// ================= SAFE =================
-function safe(v){
-    return v ?? 0;
+async function loadBest(){
+    let res = await fetch('/api/data');
+    let data = await res.json();
+
+    if(!data.length) return;
+
+    let best = data.reduce((a,b)=> (a.Score>b.Score?a:b));
+
+    document.getElementById("bestBox").innerHTML = `
+        <div class="best">${best.Username}</div>
+        <div>Score: ${best.Score}</div>
+        <div>Views: ${best.TotalViews}</div>
+        <div class="growing">${best.Status}</div>
+    `;
 }
 
-// ================= AI SCORE =================
-function calcScore(d){
-
-    let f = d.Followers || 1;
-    let v = d.TotalViews || 0;
-    let g = d.ViewGrowth || 0;
-    let l = d.LastVideoView || 0;
-
-    let score =
-        Math.min(g/50,40) +
-        Math.min((l/f)*100,30) +
-        Math.min(Math.log10(v+1)*5,20) +
-        (l > f*0.2 ? 10 : 0);
-
-    return Math.round(score);
-}
-
-// ================= LOAD DATA =================
-async function load(){
-
-    let res = await fetch("/api/workspace/default/data");
-    DATA = await res.json();
-
-    DATA = DATA.map(d => ({
-        ...d,
-        AI: calcScore(d)
-    }));
-
-    render();
-}
-
-// ================= RENDER =================
-function render(){
-    renderTable();
-    renderTop();
-    renderHeatmap();
-}
-
-// ================= TABLE =================
-function renderTable(){
+async function loadTable(){
+    let res = await fetch('/api/data');
+    let data = await res.json();
 
     let tbody = document.getElementById("tbody");
     tbody.innerHTML = "";
 
-    let sorted = [...DATA].sort((a,b)=>b.AI - a.AI);
-
-    sorted.forEach(d => {
-
-        let hot = d.AI > 75;
-        let rising = d.ViewGrowth > 1000;
+    data.forEach(d=>{
+        let statusClass =
+            d.Viral === "YES" ? "viral" :
+            d.Flop === "YES" ? "flop" :
+            "growing";
 
         tbody.innerHTML += `
-        <tr class="${hot ? 'hot' : ''} ${rising ? 'rising' : ''}">
-            <td onclick="openChart('${d.Username}')" style="cursor:pointer">
-                ${d.Username}
+        <tr onclick='selectUser("${d.Username}")'>
+            <td>${d.Username}</td>
+            <td>${d.Followers}</td>
+            <td>${d.TotalViews}</td>
+            <td>${d.LastView}</td>
+            <td>${d.Score}</td>
+            <td class="${statusClass}">
+                ${d.Viral==="YES"?"🔥 VIRAL":
+                  d.Flop==="YES"?"❌ FLOP":"⚖️ GROW"}
             </td>
-            <td>${safe(d.Followers)}</td>
-            <td>${safe(d.TotalViews)}</td>
-            <td>${safe(d.ViewGrowth)}</td>
-            <td>${d.AI}</td>
-        </tr>
-        `;
+        </tr>`;
     });
 }
 
-// ================= TOP TREND =================
-function renderTop(){
+async function selectUser(username){
 
-    let top = [...DATA]
-        .sort((a,b)=>b.AI - a.AI)
-        .slice(0,5);
+    let res = await fetch('/api/history');
+    let data = await res.json();
 
-    document.getElementById("topBox").innerHTML =
-        top.map(d =>
-            `🔥 <b>${d.Username}</b> - Score: ${d.AI} - Views: ${d.TotalViews}`
-        ).join("<br>");
-}
+    let userData = data.filter(r=>r[0]===username);
 
-// ================= HEATMAP =================
-function renderHeatmap(){
+    let views = userData.map(r=>parseInt(r[5]||0));
 
-    let el = document.getElementById("heatmap");
-    el.innerHTML = "";
+    document.getElementById("userBox").innerHTML =
+        `<b>${username}</b><br>Points: ${views.length}`;
 
-    DATA.slice(0,7).forEach(d => {
+    if(chart) chart.destroy();
 
-        let intensity = Math.min(d.ViewGrowth / 3000, 1);
-
-        el.innerHTML += `
-        <div class="cell"
-        style="background:rgba(34,197,94,${intensity})"></div>
-        `;
-    });
-}
-
-// ================= CHART =================
-async function openChart(user){
-
-    let res = await fetch("/api/history");
-    let history = await res.json();
-
-    let filtered = history.filter(x => x[1] == user);
-
-    let labels = filtered.map(x => x[0]);
-    let views = filtered.map(x => parseInt(x[5]) || 0);
-
-    new Chart(document.getElementById("chart"), {
-        type: "line",
-        data: {
-            labels,
-            datasets: [{
-                label: user,
+    chart = new Chart(document.getElementById("chart"),{
+        type:'line',
+        data:{
+            labels: userData.map((_,i)=>i),
+            datasets:[{
+                label:'Views',
                 data: views,
-                borderColor: "#22c55e",
-                tension: 0.3
+                borderColor:'#38bdf8'
             }]
         }
     });
 }
 
-// ================= AUTO REFRESH =================
-load();
-setInterval(load, 30000);
+async function init(){
+    await loadBest();
+    await loadTable();
+}
+
+init();
+
+setInterval(init,60000);
 
 </script>
 
