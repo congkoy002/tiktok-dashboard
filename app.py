@@ -7,24 +7,23 @@ app = Flask(__name__)
 
 SPREADSHEET_ID = "1Hdky0c7ojYPSE7eBc0b3PhvhIAMg0LBc9pWiakZ0gYc"
 
-# ================= GOOGLE SHEET =================
+# ================= SHEET =================
 def sheet():
     creds = json.loads(os.environ["GOOGLE_CREDENTIALS"])
     return build(
-        "sheets",
-        "v4",
+        "sheets", "v4",
         credentials=service_account.Credentials.from_service_account_info(
             creds,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
     )
 
-# ================= DASHBOARD UI =================
+# ================= HOME (FIX NOT FOUND) =================
 @app.route("/")
 def home():
     return render_template("index.html")
 
-# ================= API DATA =================
+# ================= DATA API =================
 @app.route("/api/data")
 def data():
     s = sheet()
@@ -56,10 +55,10 @@ def data():
             "LikeGrowth": n(r[9]),
             "ViewGrowth": n(r[10]),
             "Last3Views": r[11] if len(r)>11 else "",
-            "Flop": r[12] if len(r)>12 else "",
-            "Viral": r[13] if len(r)>13 else "",
+            "Flop": r[12] if len(r)>12 else "NO",
+            "Viral": r[13] if len(r)>13 else "NO",
             "Score": n(r[14]),
-            "Status": r[15] if len(r)>15 else "",
+            "Status": r[15] if len(r)>15 else "NORMAL",
             "Update": r[16] if len(r)>16 else ""
         })
 
@@ -77,7 +76,7 @@ def history():
 
     return jsonify(rows)
 
-# ================= HEALTH CHECK =================
+# ================= HEALTH =================
 @app.route("/health")
 def health():
     return {"status": "ok"}

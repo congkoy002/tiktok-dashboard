@@ -14,43 +14,29 @@ body {
     color: white;
 }
 
-/* HEADER */
 .header {
-    padding: 20px;
+    padding: 15px;
     background: #111827;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.title {
-    font-size: 20px;
     font-weight: bold;
 }
 
-/* GRID */
 .container {
-    padding: 20px;
     display: grid;
     grid-template-columns: 1fr 2fr;
-    gap: 20px;
+    gap: 15px;
+    padding: 15px;
 }
 
-/* LEFT PANEL */
 .card {
     background: #1f2937;
     padding: 15px;
-    border-radius: 12px;
-    margin-bottom: 15px;
+    border-radius: 10px;
 }
 
-/* TABLE */
 table {
     width: 100%;
     border-collapse: collapse;
     background: #111827;
-    border-radius: 10px;
-    overflow: hidden;
 }
 
 th, td {
@@ -59,59 +45,25 @@ th, td {
     border-bottom: 1px solid #222;
 }
 
-th {
-    background: #1f2937;
-    cursor: pointer;
-}
-
 tr:hover {
     background: #1e293b;
     cursor: pointer;
 }
 
-/* HIGHLIGHT */
-.viral {
-    color: #22c55e;
-    font-weight: bold;
-}
-
-.flop {
-    color: #ef4444;
-    font-weight: bold;
-}
-
-.growing {
-    color: #38bdf8;
-}
-
-/* CHART */
-.chartBox {
-    background: #111827;
-    padding: 15px;
-    border-radius: 12px;
-}
-
-/* BEST */
-.best {
-    font-size: 16px;
-    color: #facc15;
-}
+.viral { color:#22c55e; font-weight:bold; }
+.flop { color:#ef4444; font-weight:bold; }
+.normal { color:#38bdf8; }
 
 </style>
 </head>
 
 <body>
 
-<div class="header">
-    <div class="title">🚀 TikTok AI Dashboard</div>
-    <div id="status">Live</div>
-</div>
+<div class="header">🚀 TikTok AI Dashboard</div>
 
 <div class="container">
 
-    <!-- LEFT -->
     <div>
-
         <div class="card">
             <h3>🏆 Best Channel</h3>
             <div id="bestBox">Loading...</div>
@@ -119,24 +71,20 @@ tr:hover {
 
         <div class="card">
             <h3>📊 Selected User</h3>
-            <div id="userBox">Click a username</div>
+            <div id="userBox">Click username</div>
         </div>
-
     </div>
 
-    <!-- RIGHT -->
     <div>
 
-        <div class="chartBox">
-            <canvas id="chart"></canvas>
-        </div>
+        <canvas id="chart"></canvas>
 
-        <br>
+        <br><br>
 
         <table>
             <thead>
                 <tr>
-                    <th>Username</th>
+                    <th>User</th>
                     <th>Followers</th>
                     <th>Views</th>
                     <th>Last</th>
@@ -144,6 +92,7 @@ tr:hover {
                     <th>Status</th>
                 </tr>
             </thead>
+
             <tbody id="tbody"></tbody>
         </table>
 
@@ -155,45 +104,44 @@ tr:hover {
 
 let chart;
 
-async function loadBest(){
+async function loadData(){
+
     let res = await fetch('/api/data');
     let data = await res.json();
 
     if(!data.length) return;
 
-    let best = data.reduce((a,b)=> (a.Score>b.Score?a:b));
+    // BEST
+    let best = data.reduce((a,b)=> (a.Score||0) > (b.Score||0) ? a : b);
 
     document.getElementById("bestBox").innerHTML = `
-        <div class="best">${best.Username}</div>
+        <h3>${best.Username}</h3>
         <div>Score: ${best.Score}</div>
         <div>Views: ${best.TotalViews}</div>
-        <div class="growing">${best.Status}</div>
+        <div>${best.Status}</div>
     `;
-}
 
-async function loadTable(){
-    let res = await fetch('/api/data');
-    let data = await res.json();
-
+    // TABLE
     let tbody = document.getElementById("tbody");
     tbody.innerHTML = "";
 
     data.forEach(d=>{
-        let statusClass =
+
+        let cls =
             d.Viral === "YES" ? "viral" :
             d.Flop === "YES" ? "flop" :
-            "growing";
+            "normal";
 
         tbody.innerHTML += `
-        <tr onclick='selectUser("${d.Username}")'>
+        <tr onclick="selectUser('${d.Username}')">
             <td>${d.Username}</td>
             <td>${d.Followers}</td>
             <td>${d.TotalViews}</td>
             <td>${d.LastView}</td>
             <td>${d.Score}</td>
-            <td class="${statusClass}">
+            <td class="${cls}">
                 ${d.Viral==="YES"?"🔥 VIRAL":
-                  d.Flop==="YES"?"❌ FLOP":"⚖️ GROW"}
+                  d.Flop==="YES"?"❌ FLOP":"⚖️ NORMAL"}
             </td>
         </tr>`;
     });
@@ -209,31 +157,25 @@ async function selectUser(username){
     let views = userData.map(r=>parseInt(r[5]||0));
 
     document.getElementById("userBox").innerHTML =
-        `<b>${username}</b><br>Points: ${views.length}`;
+        `<b>${username}</b>`;
 
     if(chart) chart.destroy();
 
     chart = new Chart(document.getElementById("chart"),{
         type:'line',
         data:{
-            labels: userData.map((_,i)=>i),
+            labels: views.map((_,i)=>i),
             datasets:[{
-                label:'Views',
+                label:"Views",
                 data: views,
-                borderColor:'#38bdf8'
+                borderColor:"#38bdf8"
             }]
         }
     });
 }
 
-async function init(){
-    await loadBest();
-    await loadTable();
-}
-
-init();
-
-setInterval(init,60000);
+loadData();
+setInterval(loadData, 60000);
 
 </script>
 
